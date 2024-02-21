@@ -92,6 +92,8 @@ class MLEResBlock(nn.Module):
         if self.resize is not None:
             resized_input = self.resize(hidden_states)
             output += resized_input
+        else:
+            output += hidden_states
 
         return output
 
@@ -244,6 +246,8 @@ class MLEDecoderLayer(nn.Module):
 
         if self.resize is not None:
             hidden_states += self.resize(shortcut_states)
+        else:
+            hidden_states += shortcut_states
 
         return hidden_states
 
