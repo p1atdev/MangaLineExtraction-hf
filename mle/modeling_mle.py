@@ -164,11 +164,11 @@ class MLEEncoder(nn.Module):
 
     def forward(
         self, hidden_states: torch.Tensor
-    ) -> tuple[torch.Tensor, list[torch.Tensor]]:
-        all_hidden_states = []
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, ...]]:
+        all_hidden_states: tuple[torch.Tensor, ...] = ()
         for layer in self.layers:
             hidden_states = layer(hidden_states)
-            all_hidden_states.append(hidden_states)
+            all_hidden_states += (hidden_states,)
         return hidden_states, all_hidden_states
 
 
@@ -194,32 +194,21 @@ class MLEUpsampleBlock(nn.Module):
         return output
 
 
-class MLEDecoderLayer(nn.Module):
-    def __init__(
-        self,
-        config: MLEConfig,
-        in_features: int,
-        out_features: int,
-        num_layers: int,
-    ):
+class MLEUpsampleResBlock(nn.Module):
+    def __init__(self, config: MLEConfig, in_features: int, out_features: int):
         super().__init__()
 
         self.upsample = MLEUpsampleBlock(
-            config,
-            in_features=in_features,
-            out_features=out_features,
+            config, in_features=in_features, out_features=out_features
         )
 
-        self.blocks = nn.ModuleList(
-            [
-                MLEResBlock(
-                    config,
-                    in_channels=out_features,
-                    out_channels=out_features,
-                    stride_size=1,
-                )
-                for i in range(num_layers)
-            ]
+        self.norm = MLEBatchNorm(config, in_features=out_features)
+        self.conv = nn.Conv2d(
+            out_features,
+            out_features,
+            config.block_kernel_size,
+            stride=1,
+            padding=config.block_kernel_size // 2,
         )
 
         if in_features != out_features:
@@ -235,19 +224,54 @@ class MLEDecoderLayer(nn.Module):
         else:
             self.resize = None
 
+    def forward(self, hidden_states: torch.Tensor):
+        output = self.upsample(hidden_states)
+        output = self.norm(output)
+        output = self.conv(output)
+
+        if self.resize is not None:
+            output += self.resize(hidden_states)
+
+        return output
+
+
+class MLEDecoderLayer(nn.Module):
+    def __init__(
+        self,
+        config: MLEConfig,
+        in_features: int,
+        out_features: int,
+        num_layers: int,
+    ):
+        super().__init__()
+
+        self.blocks = nn.ModuleList(
+            [
+                (
+                    MLEResBlock(
+                        config,
+                        in_channels=out_features,
+                        out_channels=out_features,
+                        stride_size=1,
+                    )
+                    if i > 0
+                    else MLEUpsampleResBlock(
+                        config,
+                        in_features=in_features,
+                        out_features=out_features,
+                    )
+                )
+                for i in range(num_layers)
+            ]
+        )
+
     def forward(
         self, hidden_states: torch.Tensor, shortcut_states: torch.Tensor
     ) -> torch.Tensor:
-        # upsample
-        hidden_states = self.upsample(hidden_states)
-
         for block in self.blocks:
             hidden_states = block(hidden_states)
 
-        if self.resize is not None:
-            hidden_states += self.resize(shortcut_states)
-        else:
-            hidden_states += shortcut_states
+        hidden_states += shortcut_states
 
         return hidden_states
 
@@ -316,7 +340,7 @@ class MLEDecoder(nn.Module):
     def forward(
         self,
         last_hidden_states: torch.Tensor,
-        encoder_hidden_states: list[torch.Tensor],
+        encoder_hidden_states: tuple[torch.Tensor, ...],
     ) -> torch.Tensor:
         hidden_states = last_hidden_states
         num_encoder_hidden_states = len(encoder_hidden_states)  # 5
@@ -327,8 +351,8 @@ class MLEDecoder(nn.Module):
                     hidden_states,
                     # 0, 1, 2, 3, 4
                     # ↓  ↓  ↓  ↓  ↓
-                    # _, 8, 7, 6, 5
-                    encoder_hidden_states[num_encoder_hidden_states - 1 - i],
+                    # 8, 7, 6, 5, 5
+                    encoder_hidden_states[num_encoder_hidden_states - 2 - i],
                 )
             else:
                 # decoder head
