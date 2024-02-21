@@ -16,7 +16,7 @@ class MLEConfig(PretrainedConfig):
         self,
         in_channels=1,
         num_encoder_layers=[2, 3, 5, 7, 12],
-        num_decoder_layers=[7, 5, 3, 2, 2],
+        num_decoder_layers=[6, 4, 2, 1, 2],
         last_hidden_channels=16,
         block_stride_size=4,
         block_kernel_size=3,
