@@ -32,6 +32,7 @@ class MLEBatchNorm(nn.Module):
         super().__init__()
 
         self.norm = nn.BatchNorm2d(in_features, eps=config.batch_norm_eps)
+        # the original model uses leaky_relu
         if config.hidden_act == "leaky_relu":
             self.act_fn = nn.LeakyReLU(negative_slope=config.negative_slope)
         else:
@@ -173,8 +174,8 @@ class MLEUpsampleBlock(nn.Module):
     def __init__(self, config: MLEConfig, in_features: int, out_features: int):
         super().__init__()
 
-        self.norm1 = MLEBatchNorm(config, in_features=in_features)
-        self.conv1 = nn.Conv2d(
+        self.norm = MLEBatchNorm(config, in_features=in_features)
+        self.conv = nn.Conv2d(
             in_features,
             out_features,
             config.block_kernel_size,
@@ -184,8 +185,8 @@ class MLEUpsampleBlock(nn.Module):
         self.upsample = nn.Upsample(scale_factor=config.upsample_ratio)
 
     def forward(self, hidden_states: torch.Tensor):
-        output = self.norm1(hidden_states)
-        output = self.conv1(output)
+        output = self.norm(hidden_states)
+        output = self.conv(output)
         output = self.upsample(output)
 
         return output
