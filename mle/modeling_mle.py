@@ -391,23 +391,26 @@ class MLEForAnimeLineExtraction(MLEPretrainedModel):
 
         self.model = MLEModel(config)
 
-    def postprocess(self, output_tensor: torch.Tensor, input_shape: torch.Size):
-        pixel_values = output_tensor[0, 0, :, :]
+    def postprocess(self, output_tensor: torch.Tensor, input_shape: tuple[int, int]):
+        pixel_values = output_tensor[:, 0, :, :]
         pixel_values = torch.clip(pixel_values, 0, 255)
 
-        pixel_values = pixel_values[0 : input_shape[2], 0 : input_shape[3]]
+        pixel_values = pixel_values[:, 0 : input_shape[0], 0 : input_shape[1]]
         return pixel_values
 
     def forward(
         self, pixel_values: torch.Tensor, return_dict: bool = True
     ) -> tuple[torch.Tensor, ...] | MLEForAnimeLineExtractionOutput:
+        # height, width
+        input_image_size = (pixel_values.shape[2], pixel_values.shape[3])
+
         model_output = self.model(pixel_values)
 
         if not return_dict:
-            return (model_output, self.postprocess(model_output, pixel_values.shape))
+            return (model_output, self.postprocess(model_output, input_image_size))
 
         else:
             return MLEForAnimeLineExtractionOutput(
                 last_hidden_state=model_output,
-                pixel_values=self.postprocess(model_output, pixel_values.shape),
+                pixel_values=self.postprocess(model_output, input_image_size),
             )
