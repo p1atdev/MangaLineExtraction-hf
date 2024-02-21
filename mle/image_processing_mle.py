@@ -1,11 +1,10 @@
 # copied from ViTImageProcessor (https://github.com/huggingface/transformers/blob/v4.37.2/src/transformers/models/vit/image_processing_vit.py)
 
-"""Image processor class for WD v14 Tagger."""
+"""Image processor class for Manga Line Extraction."""
 
 from typing import Optional, List, Dict, Union, Tuple
 
 import numpy as np
-import cv2
 from PIL import Image
 
 from transformers.image_processing_utils import (
